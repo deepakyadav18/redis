@@ -51,6 +51,23 @@ public class InMemoryStorageTest {
         assert storage.ttl("session") == -2;
         System.out.println("Test 8 passed");
 
-        System.out.println("All tests passed!");
+        // Active expiration test
+        storage.set("a", "1");
+        storage.set("b", "2");
+        storage.set("c", "3");
+
+        storage.expire("a", 0);
+        storage.expire("b", 100);
+        storage.expire("c", 0);
+
+        int removed = storage.activeExpire(3);
+
+        assert removed == 2;
+        assert storage.get("a") == null;
+        assert storage.get("b").equals("2");
+        assert storage.get("c") == null;
+
+        System.out.println("Active expiration test passed");
+
     }
 }

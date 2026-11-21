@@ -20,6 +20,8 @@ public class SelectorEchoServer {
     private static final StorageEngine storage = new InMemoryStorage();
     private static final CommandHandler commandHandler = new CommandHandler(storage);
     private static final RespEncoder respEncoder = new RespEncoder();
+    private static final int ACTIVE_EXPIRE_SAMPLE_SIZE = 20;
+    private static final long ACTIVE_EXPIRE_INTERVAL_MS = 100;
 
     public static void main(String[] args) throws IOException {
         Selector selector = Selector.open();
@@ -30,8 +32,10 @@ public class SelectorEchoServer {
         server.register(selector, SelectionKey.OP_ACCEPT);
         System.out.println("Server started on port 6379");
 
+        long nextExpirationRun = System.nanoTime() + ACTIVE_EXPIRE_INTERVAL_MS * 1_000_000;
+
         while(true) {
-            selector.select();
+            selector.select(ACTIVE_EXPIRE_INTERVAL_MS);
 
             Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
 
@@ -56,6 +60,17 @@ public class SelectorEchoServer {
                 } catch (IOException e) {
                     closeClient(key);
                 }
+            }
+
+            long currTime = System.nanoTime();
+            if (currTime >= nextExpirationRun) {
+                int removed = storage.activeExpire(ACTIVE_EXPIRE_SAMPLE_SIZE);
+                if (removed > 0) {
+                    System.out.println(
+                            "Active expiration removed " + removed + " keys"
+                    );
+                }
+                nextExpirationRun = currTime + ACTIVE_EXPIRE_INTERVAL_MS * 1_000_000;
             }
         }
     }

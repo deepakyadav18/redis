@@ -14,4 +14,6 @@ public interface StorageEngine {
 
     long ttl(String key);
 
+    int activeExpire(int sampleSize);
+
 }

@@ -1,7 +1,9 @@
 package com.redis.storage;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 public class InMemoryStorage implements StorageEngine{
 
@@ -66,6 +68,28 @@ public class InMemoryStorage implements StorageEngine{
             return -2;
         }
         return remainingTime;
+    }
+
+    @Override
+    public int activeExpire(int sampleSize) {
+        int expiredCount = 0;
+        int sampledCount = 0;
+
+        Iterator<Map.Entry<String, Long>> iterator = expiry.entrySet().iterator();
+
+        long currTime = System.currentTimeMillis();
+
+        while(iterator.hasNext() && sampledCount < sampleSize) {
+            Map.Entry<String, Long> entry = iterator.next();
+            sampledCount++;
+
+            if(currTime >= entry.getValue()) {
+                data.remove(entry.getKey());
+                iterator.remove();
+                expiredCount++;
+            }
+        }
+        return expiredCount;
     }
 
     private boolean isExpired(String key) {
