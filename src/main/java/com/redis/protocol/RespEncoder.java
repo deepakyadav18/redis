@@ -28,6 +28,7 @@ public class RespEncoder {
 
                 return buffer;
             }
+            case NULL_BULK_STRING -> encoded = "$-1\r\n";
             default -> throw new IllegalStateException(
                     "Unsupported response type"
             );

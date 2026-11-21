@@ -7,7 +7,8 @@ public record RespResponse(Type type, String value) {
         SIMPLE_STRING,
         BULK_STRING,
         ERROR,
-        INTEGER
+        INTEGER,
+        NULL_BULK_STRING
     }
 
     public static RespResponse simpleString(String value) {
@@ -24,5 +25,9 @@ public record RespResponse(Type type, String value) {
 
     public static RespResponse integer(long value) {
         return new RespResponse(Type.INTEGER, String.valueOf(value));
+    }
+
+    public static RespResponse nullBulkString() {
+        return new RespResponse(Type.NULL_BULK_STRING, null);
     }
 }

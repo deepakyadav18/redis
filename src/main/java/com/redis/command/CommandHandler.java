@@ -9,9 +9,11 @@ import java.util.Locale;
 public class CommandHandler {
     private final PingCommand pingCommand = new PingCommand();
     private final SetCommand setCommand;
+    private final GetCommand getCommand;
 
     public CommandHandler(StorageEngine storage) {
         this.setCommand = new SetCommand(storage);
+        this.getCommand = new GetCommand(storage);
     }
 
     public RespResponse handle(List<String> commandParts) {
@@ -25,6 +27,7 @@ public class CommandHandler {
         return switch (commandName) {
             case "PING" -> pingCommand.execute(arguments);
             case "SET" -> setCommand.execute(arguments);
+            case "GET" -> getCommand.execute(arguments);
             default -> RespResponse.error("ERR unknown command '" + commandName + "'");
         };
     }
