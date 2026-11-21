@@ -1,6 +1,7 @@
 package com.redis.storage;
 
 import java.util.HashMap;
+import java.util.List;
 
 public class InMemoryStorage implements StorageEngine{
 
@@ -17,7 +18,11 @@ public class InMemoryStorage implements StorageEngine{
     }
 
     @Override
-    public boolean delete(String key) {
-        return data.remove(key) != null;
+    public int delete(List<String> keys) {
+        int deletedCount = 0;
+        for(String key: keys) {
+            if(data.remove(key) != null) deletedCount++;
+        }
+        return deletedCount;
     }
 }
