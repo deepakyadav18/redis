@@ -2,6 +2,8 @@ package com.redis.server;
 
 import com.redis.command.CommandHandler;
 import com.redis.protocol.*;
+import com.redis.storage.InMemoryStorage;
+import com.redis.storage.StorageEngine;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -15,7 +17,8 @@ import java.util.Iterator;
 public class SelectorEchoServer {
 
     private static final RespParser parser = new RespParser();
-    private static final CommandHandler commandHandler = new CommandHandler();
+    private static final StorageEngine storage = new InMemoryStorage();
+    private static final CommandHandler commandHandler = new CommandHandler(storage);
     private static final RespEncoder respEncoder = new RespEncoder();
 
     public static void main(String[] args) throws IOException {
@@ -120,7 +123,6 @@ public class SelectorEchoServer {
             state.readBuffer = BufferUtils.grow(state.readBuffer);
         }
 
-        // Ask selector to notify us when the client can accept writes
         key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
     }
 

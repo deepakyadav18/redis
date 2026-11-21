@@ -1,12 +1,18 @@
 package com.redis.command;
 
 import com.redis.protocol.RespResponse;
+import com.redis.storage.StorageEngine;
 
 import java.util.List;
 import java.util.Locale;
 
 public class CommandHandler {
     private final PingCommand pingCommand = new PingCommand();
+    private final SetCommand setCommand;
+
+    public CommandHandler(StorageEngine storage) {
+        this.setCommand = new SetCommand(storage);
+    }
 
     public RespResponse handle(List<String> commandParts) {
         if (commandParts == null || commandParts.isEmpty()) {
@@ -18,6 +24,7 @@ public class CommandHandler {
 
         return switch (commandName) {
             case "PING" -> pingCommand.execute(arguments);
+            case "SET" -> setCommand.execute(arguments);
             default -> RespResponse.error("ERR unknown command '" + commandName + "'");
         };
     }
