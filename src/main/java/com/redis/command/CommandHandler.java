@@ -11,11 +11,15 @@ public class CommandHandler {
     private final SetCommand setCommand;
     private final GetCommand getCommand;
     private final DeleteCommand deleteCommand;
+    private final ExpireCommand expireCommand;
+    private final TtlCommand ttlCommand;
 
     public CommandHandler(StorageEngine storage) {
         this.setCommand = new SetCommand(storage);
         this.getCommand = new GetCommand(storage);
         this.deleteCommand = new DeleteCommand(storage);
+        this.expireCommand = new ExpireCommand(storage);
+        this.ttlCommand = new TtlCommand(storage);
     }
 
     public RespResponse handle(List<String> commandParts) {
@@ -31,6 +35,8 @@ public class CommandHandler {
             case "SET" -> setCommand.execute(arguments);
             case "GET" -> getCommand.execute(arguments);
             case "DEL" -> deleteCommand.execute(arguments);
+            case "EXPIRE" -> expireCommand.execute(arguments);
+            case "TTL" -> ttlCommand.execute(arguments);
             default -> RespResponse.error("ERR unknown command '" + commandName + "'");
         };
     }
