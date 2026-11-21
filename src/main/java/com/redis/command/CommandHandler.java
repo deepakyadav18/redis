@@ -13,6 +13,9 @@ public class CommandHandler {
     private final DeleteCommand deleteCommand;
     private final ExpireCommand expireCommand;
     private final TtlCommand ttlCommand;
+    private final IncrementCommand incrCommand;
+    private final IncrementCommand decrCommand;
+    private final IncrByCommand incrByCommand;
 
     public CommandHandler(StorageEngine storage) {
         this.setCommand = new SetCommand(storage);
@@ -20,6 +23,9 @@ public class CommandHandler {
         this.deleteCommand = new DeleteCommand(storage);
         this.expireCommand = new ExpireCommand(storage);
         this.ttlCommand = new TtlCommand(storage);
+        this.incrCommand = new IncrementCommand(storage, 1, "INCR");
+        this.decrCommand = new IncrementCommand(storage, -1, "DECR");
+        this.incrByCommand = new IncrByCommand(storage);
     }
 
     public RespResponse handle(List<String> commandParts) {
@@ -37,6 +43,9 @@ public class CommandHandler {
             case "DEL" -> deleteCommand.execute(arguments);
             case "EXPIRE" -> expireCommand.execute(arguments);
             case "TTL" -> ttlCommand.execute(arguments);
+            case "INCR" -> incrCommand.execute(arguments);
+            case "DECR" -> decrCommand.execute(arguments);
+            case "INCRBY" -> incrByCommand.execute(arguments);
             default -> RespResponse.error("ERR unknown command '" + commandName + "'");
         };
     }

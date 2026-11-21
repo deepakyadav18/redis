@@ -16,4 +16,6 @@ public interface StorageEngine {
 
     int activeExpire(int sampleSize);
 
+    long incrementBy(String key, long delta);
+
 }

@@ -92,6 +92,31 @@ public class InMemoryStorage implements StorageEngine{
         return expiredCount;
     }
 
+    @Override
+    public long incrementBy(String key, long delta) throws NumberFormatException {
+        if(isExpired(key)) {
+            removeExpiredKey(key);
+        }
+
+        String currentValue = data.get(key);
+
+        if (currentValue == null) {
+            data.put(key, String.valueOf(delta));
+            return delta;
+        }
+
+        try {
+            long val = Long.parseLong(data.get(key));
+            long incVal = Math.addExact(val, delta);
+            data.put(key, String.valueOf(incVal));
+            return incVal;
+        } catch (NumberFormatException e) {
+            throw new NumberFormatException("ERR Value is not an integer");
+        } catch (ArithmeticException e) {
+            throw new ArithmeticException("ERR increment or decrement would overflow");
+        }
+    }
+
     private boolean isExpired(String key) {
         Long expiryTime = expiry.get(key);
 
