@@ -22,10 +22,15 @@ public class GetCommand implements Command {
         }
 
         String key = arguments.getFirst();
+        try {
+            String value = storage.get(key);
 
-        String value = storage.get(key);
-
-        if(value == null) return RespResponse.nullBulkString();
-        return RespResponse.bulkString(value);
+            if (value == null) {
+                return RespResponse.nullBulkString();
+            }
+            return RespResponse.bulkString(value);
+        } catch (IllegalStateException e) {
+            return RespResponse.error(e.getMessage());
+        }
     }
 }

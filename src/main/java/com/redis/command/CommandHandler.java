@@ -16,6 +16,14 @@ public class CommandHandler {
     private final IncrementCommand incrCommand;
     private final IncrementCommand decrCommand;
     private final IncrByCommand incrByCommand;
+    private final LPushCommand lpushCommand;
+    private final RPushCommand rpushCommand;
+    private final RPopCommand rPopCommand;
+    private final LPopCommand lPopCommand;
+    private final LlenCommand llenCommand;
+    private final LRangeCommand lRangeCommand;
+    private final LIndexCommand lIndexCommand;
+
 
     public CommandHandler(StorageEngine storage) {
         this.setCommand = new SetCommand(storage);
@@ -26,6 +34,13 @@ public class CommandHandler {
         this.incrCommand = new IncrementCommand(storage, 1, "INCR");
         this.decrCommand = new IncrementCommand(storage, -1, "DECR");
         this.incrByCommand = new IncrByCommand(storage);
+        this.lpushCommand = new LPushCommand(storage);
+        this.rpushCommand = new RPushCommand(storage);
+        this.rPopCommand = new RPopCommand(storage);
+        this.lPopCommand = new LPopCommand(storage);
+        this.llenCommand = new LlenCommand(storage);
+        this.lRangeCommand = new LRangeCommand(storage);
+        this.lIndexCommand = new LIndexCommand(storage);
     }
 
     public RespResponse handle(List<String> commandParts) {
@@ -46,6 +61,13 @@ public class CommandHandler {
             case "INCR" -> incrCommand.execute(arguments);
             case "DECR" -> decrCommand.execute(arguments);
             case "INCRBY" -> incrByCommand.execute(arguments);
+            case "LPUSH" -> lpushCommand.execute(arguments);
+            case "RPUSH" -> rpushCommand.execute(arguments);
+            case "LPOP" -> lPopCommand.execute(arguments);
+            case "RPOP" -> rPopCommand.execute(arguments);
+            case "LLEN" -> llenCommand.execute(arguments);
+            case "LRANGE" -> lRangeCommand.execute(arguments);
+            case "LINDEX" -> lIndexCommand.execute(arguments);
             default -> RespResponse.error("ERR unknown command '" + commandName + "'");
         };
     }

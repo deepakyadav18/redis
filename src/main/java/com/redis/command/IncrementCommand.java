@@ -1,3 +1,4 @@
+
 package com.redis.command;
 
 import com.redis.protocol.RespResponse;
@@ -32,7 +33,8 @@ public class IncrementCommand implements Command {
         try {
             long result = storage.incrementBy(arguments.getFirst(), delta);
             return RespResponse.integer(result);
-        } catch (NumberFormatException | ArithmeticException e) {
+
+        } catch (NumberFormatException | ArithmeticException | IllegalStateException e) {
             return RespResponse.error(e.getMessage());
         }
     }

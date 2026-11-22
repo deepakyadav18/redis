@@ -18,4 +18,18 @@ public interface StorageEngine {
 
     long incrementBy(String key, long delta);
 
+    long lpush(String key, List<String> values);
+
+    long rpush(String key, List<String> values);
+
+    String lpop(String key);
+
+    String rpop(String key);
+
+    long llen(String key);
+
+    List<String> lrange(String key, long start, long stop);
+
+    String lindex(String key, long index);
+
 }

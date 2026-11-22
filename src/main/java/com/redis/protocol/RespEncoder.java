@@ -2,6 +2,7 @@ package com.redis.protocol;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 public class RespEncoder {
     public ByteBuffer encode(RespResponse response) {
@@ -29,6 +30,9 @@ public class RespEncoder {
                 return buffer;
             }
             case NULL_BULK_STRING -> encoded = "$-1\r\n";
+            case ARRAY -> {
+                return encodeArray(response.elements());
+            }
             default -> throw new IllegalStateException(
                     "Unsupported response type"
             );
@@ -36,5 +40,19 @@ public class RespEncoder {
         return ByteBuffer.wrap(
                 encoded.getBytes(StandardCharsets.UTF_8)
         );
+    }
+
+    private ByteBuffer encodeArray(List<RespResponse> elements) {
+        StringBuilder result = new StringBuilder();
+        result.append("*").append(elements.size()).append("\r\n");
+
+        for (RespResponse element : elements) {
+            ByteBuffer encoded = encode(element);
+            byte[] bytes = new byte[encoded.remaining()];
+            encoded.get(bytes);
+            result.append(new String(bytes, StandardCharsets.UTF_8));
+        }
+
+        return ByteBuffer.wrap(result.toString().getBytes(StandardCharsets.UTF_8));
     }
 }
