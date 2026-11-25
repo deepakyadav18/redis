@@ -1,34 +1,33 @@
-
 package com.redis.storage;
 
 import java.util.*;
 
 public class InMemoryStorage implements StorageEngine {
 
-    private final HashMap<String, String> data = new HashMap<>();
-    private final HashMap<String, Long> expiry = new HashMap<>();
-    private final HashMap<String, Deque<String>> lists = new HashMap<>();
+    private final RedisDatabase database = new RedisDatabase();
+
+    private static final String WRONG_TYPE =
+            "WRONGTYPE Operation against a key holding the wrong kind of value";
 
     @Override
     public void set(String key, String value) {
-        lists.remove(key);
-        data.put(key, value);
-        expiry.remove(key);
+        RedisObject object = RedisObject.stringRaw(value);
+        database.put(key, object);
     }
 
     @Override
     public String get(String key) {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
+        RedisObject object = database.get(key);
+
+        if (object == null) {
+            return null;
         }
 
-        if (lists.containsKey(key)) {
-            throw new IllegalStateException(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value"
-            );
+        if (object.getType() != RedisType.STRING) {
+            throw new IllegalStateException(WRONG_TYPE);
         }
 
-        return data.get(key);
+        return (String) object.getValue();
     }
 
     @Override
@@ -36,16 +35,7 @@ public class InMemoryStorage implements StorageEngine {
         int deletedCount = 0;
 
         for (String key : keys) {
-            if (isExpired(key)) {
-                removeExpiredKey(key);
-                continue;
-            }
-
-            boolean deleted = data.remove(key) != null;
-            deleted |= lists.remove(key) != null;
-
-            if (deleted) {
-                expiry.remove(key);
+            if (database.remove(key) != null) {
                 deletedCount++;
             }
         }
@@ -55,111 +45,52 @@ public class InMemoryStorage implements StorageEngine {
 
     @Override
     public boolean expire(String key, long seconds) {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
-            return false;
-        }
-
-        if (!data.containsKey(key) && !lists.containsKey(key)) {
-            return false;
-        }
-
-        if (seconds <= 0) {
-            removeExpiredKey(key);
-            return true;
-        }
-
-        try {
-            long expiryMillis = Math.multiplyExact(seconds, 1000L);
-            long expiryTime = Math.addExact(
-                    System.currentTimeMillis(), expiryMillis
-            );
-
-            expiry.put(key, expiryTime);
-            return true;
-
-        } catch (ArithmeticException e) {
-            throw new IllegalArgumentException("ERR invalid expire time");
-        }
+        return database.expire(key, seconds);
     }
 
     @Override
     public long ttl(String key) {
-        if (!data.containsKey(key) && !lists.containsKey(key)) {
-            return -2;
-        }
-
-        if (!expiry.containsKey(key)) {
-            return -1;
-        }
-
-        long expiryTime = expiry.get(key);
-        long currentTime = System.currentTimeMillis();
-
-        if (expiryTime <= currentTime) {
-            removeExpiredKey(key);
-            return -2;
-        }
-
-        return (expiryTime - currentTime) / 1000;
+        return database.ttl(key);
     }
 
     @Override
     public int activeExpire(int sampleSize) {
-        int expiredCount = 0;
-        int sampledCount = 0;
-
-        Iterator<Map.Entry<String, Long>> iterator =
-                expiry.entrySet().iterator();
-
-        long currentTime = System.currentTimeMillis();
-
-        while (iterator.hasNext() && sampledCount < sampleSize) {
-            Map.Entry<String, Long> entry = iterator.next();
-            sampledCount++;
-
-            if (currentTime >= entry.getValue()) {
-                String key = entry.getKey();
-
-                data.remove(key);
-                lists.remove(key);
-                iterator.remove();
-
-                expiredCount++;
-            }
-        }
-
-        return expiredCount;
+        return database.activeExpire(sampleSize);
     }
 
     @Override
-    public long incrementBy(String key, long delta) throws NumberFormatException {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
-        }
+    public long incrementBy(String key, long delta)
+            throws NumberFormatException {
 
-        if (lists.containsKey(key)) {
-            throw new IllegalStateException(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value"
-            );
-        }
+        RedisObject object = database.get(key);
 
-        String currentValue = data.get(key);
-
-        if (currentValue == null) {
-            data.put(key, String.valueOf(delta));
+        if (object == null) {
+            RedisObject newObject = RedisObject.stringRaw(String.valueOf(delta));
+            database.putPreservingExpiry(key, newObject);
             return delta;
         }
+
+        if (object.getType() != RedisType.STRING) {
+            throw new IllegalStateException(WRONG_TYPE);
+        }
+
+        String currentValue = (String) object.getValue();
 
         try {
             long value = Long.parseLong(currentValue);
             long incrementedValue = Math.addExact(value, delta);
 
-            data.put(key, String.valueOf(incrementedValue));
+            RedisObject updatedObject = RedisObject.stringRaw(String.valueOf(incrementedValue));
+
+            // INCR preserves the existing TTL.
+            database.putPreservingExpiry(key, updatedObject);
+
             return incrementedValue;
 
         } catch (NumberFormatException e) {
-            throw new NumberFormatException("ERR Value is not an integer");
+            throw new NumberFormatException(
+                    "ERR Value is not an integer"
+            );
 
         } catch (ArithmeticException e) {
             throw new ArithmeticException(
@@ -168,21 +99,38 @@ public class InMemoryStorage implements StorageEngine {
         }
     }
 
+    private Deque<String> getList(RedisObject object) {
+        return (Deque<String>) object.getValue();
+    }
+
+    private RedisObject getListObject(String key) {
+        RedisObject object = database.get(key);
+
+        if (object == null) {
+            return null;
+        }
+
+        if (object.getType() != RedisType.LIST) {
+            throw new IllegalStateException(WRONG_TYPE);
+        }
+
+        return object;
+    }
+
+    private RedisObject createListObject() {
+        return RedisObject.listDeque(new ArrayDeque<>());
+    }
+
     @Override
     public long lpush(String key, List<String> values) {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
+        RedisObject object = getListObject(key);
+
+        if (object == null) {
+            object = createListObject();
+            database.putPreservingExpiry(key, object);
         }
 
-        if (data.containsKey(key)) {
-            throw new IllegalStateException(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value"
-            );
-        }
-
-        Deque<String> list = lists.computeIfAbsent(
-                key, k -> new ArrayDeque<>()
-        );
+        Deque<String> list = getList(object);
 
         for (String value : values) {
             list.addFirst(value);
@@ -193,19 +141,14 @@ public class InMemoryStorage implements StorageEngine {
 
     @Override
     public long rpush(String key, List<String> values) {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
+        RedisObject object = getListObject(key);
+
+        if (object == null) {
+            object = createListObject();
+            database.putPreservingExpiry(key, object);
         }
 
-        if (data.containsKey(key)) {
-            throw new IllegalStateException(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value"
-            );
-        }
-
-        Deque<String> list = lists.computeIfAbsent(
-                key, k -> new ArrayDeque<>()
-        );
+        Deque<String> list = getList(object);
 
         for (String value : values) {
             list.addLast(value);
@@ -216,27 +159,18 @@ public class InMemoryStorage implements StorageEngine {
 
     @Override
     public String lpop(String key) {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
-        }
+        RedisObject object = getListObject(key);
 
-        if (data.containsKey(key)) {
-            throw new IllegalStateException(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value"
-            );
-        }
-
-        Deque<String> list = lists.get(key);
-
-        if (list == null) {
+        if (object == null) {
             return null;
         }
+
+        Deque<String> list = getList(object);
 
         String value = list.pollFirst();
 
         if (list.isEmpty()) {
-            lists.remove(key);
-            expiry.remove(key);
+            database.remove(key);
         }
 
         return value;
@@ -244,27 +178,18 @@ public class InMemoryStorage implements StorageEngine {
 
     @Override
     public String rpop(String key) {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
-        }
+        RedisObject object = getListObject(key);
 
-        if (data.containsKey(key)) {
-            throw new IllegalStateException(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value"
-            );
-        }
-
-        Deque<String> list = lists.get(key);
-
-        if (list == null) {
+        if (object == null) {
             return null;
         }
+
+        Deque<String> list = getList(object);
 
         String value = list.pollLast();
 
         if (list.isEmpty()) {
-            lists.remove(key);
-            expiry.remove(key);
+            database.remove(key);
         }
 
         return value;
@@ -272,44 +197,35 @@ public class InMemoryStorage implements StorageEngine {
 
     @Override
     public long llen(String key) {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
+        RedisObject object = getListObject(key);
+
+        if (object == null) {
+            return 0;
         }
 
-        if (data.containsKey(key)) {
-            throw new IllegalStateException(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value"
-            );
-        }
-
-        Deque<String> list = lists.get(key);
-        return list == null ? 0 : list.size();
+        return getList(object).size();
     }
 
     @Override
     public List<String> lrange(String key, long start, long stop) {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
-        }
+        RedisObject object = getListObject(key);
 
-        if (data.containsKey(key)) {
-            throw new IllegalStateException(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value"
-            );
-        }
-
-        Deque<String> list = lists.get(key);
-        if (list == null) {
+        if (object == null) {
             return List.of();
         }
 
+        Deque<String> list = getList(object);
+
         int size = list.size();
 
-        // Negative indexes count from the end.
-        if (start < 0) start += size;
-        if (stop < 0) stop += size;
+        if (start < 0) {
+            start += size;
+        }
 
-        // Clamp indexes to valid boundaries.
+        if (stop < 0) {
+            stop += size;
+        }
+
         start = Math.max(0, start);
         stop = Math.min(size - 1L, stop);
 
@@ -318,6 +234,7 @@ public class InMemoryStorage implements StorageEngine {
         }
 
         List<String> result = new ArrayList<>();
+
         int currentIndex = 0;
 
         for (String value : list) {
@@ -337,20 +254,13 @@ public class InMemoryStorage implements StorageEngine {
 
     @Override
     public String lindex(String key, long index) {
-        if (isExpired(key)) {
-            removeExpiredKey(key);
-        }
+        RedisObject object = getListObject(key);
 
-        if (data.containsKey(key)) {
-            throw new IllegalStateException(
-                    "WRONGTYPE Operation against a key holding the wrong kind of value"
-            );
-        }
-
-        Deque<String> list = lists.get(key);
-        if (list == null) {
+        if (object == null) {
             return null;
         }
+
+        Deque<String> list = getList(object);
 
         if (index < 0) {
             index += list.size();
@@ -370,22 +280,5 @@ public class InMemoryStorage implements StorageEngine {
         }
 
         return null;
-    }
-
-    private boolean isExpired(String key) {
-        if (!data.containsKey(key) && !lists.containsKey(key)) {
-            return false;
-        }
-
-        Long expiryTime = expiry.get(key);
-
-        return expiryTime != null &&
-                System.currentTimeMillis() >= expiryTime;
-    }
-
-    private void removeExpiredKey(String key) {
-        data.remove(key);
-        lists.remove(key);
-        expiry.remove(key);
     }
 }
